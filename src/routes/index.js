@@ -5,6 +5,7 @@ import logosRoutes from "../modules/logos/logos.routes.js";
 import companyRoutes from "../modules/company/company.routes.js";
 import reportsRoutes from "../modules/reports/reports.routes.js";
 import crawlerRoutes from "../modules/crawler/crawler.routes.js";
+import logoDetectionRoutes from "../modules/logo-detections/logo-detections.routes.js";
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use("/logos", logosRoutes);
 router.use("/company", companyRoutes);
 router.use("/company/violations", reportsRoutes);
 router.use("/crawler", crawlerRoutes);
+router.use("/logo-detections", logoDetectionRoutes);
 
 export default router;

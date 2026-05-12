@@ -69,6 +69,7 @@ model Analysis {
 
   user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   violationReports ViolationReport[]
+  logoDetections   LogoDetection[]
 
   @@index([userId])
   @@index([guestToken])
@@ -136,7 +137,8 @@ model CrawlerResult {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  logoDetections LogoDetection[]
 
   @@index([companyId])
   @@index([brand])
@@ -144,4 +146,37 @@ model CrawlerResult {
   @@index([productStatus])
   @@index([accountLabel])
   @@index([capturedAt])
+}
+
+model LogoDetection {
+  id               String   @id @default(cuid())
+  sourceImageId    String
+  sourceType       String
+  sourceImagePath  String?
+  previewImagePath String?
+  previewUrl       String?
+  detected         Boolean  @default(true)
+  detectionId      String
+  brand            String
+  logoConfidence   Float
+  bbox             Json
+  bboxPadded       Json
+  cropPath         String?
+  cropUrl          String?
+  imageWidth       Int?
+  imageHeight      Int?
+  analysisId       String?
+  crawlerResultId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  analysis      Analysis?      @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  crawlerResult CrawlerResult? @relation(fields: [crawlerResultId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceImageId, detectionId])
+  @@index([analysisId])
+  @@index([crawlerResultId])
+  @@index([sourceImageId])
+  @@index([sourceType])
+  @@index([brand])
 }
