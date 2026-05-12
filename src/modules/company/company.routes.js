@@ -7,6 +7,8 @@ import {
   dashboardStats,
   uploadReferenceLogo,
   listReferenceLogos,
+  listCrawlerResults,
+  crawlerResultDetails,
 } from "./company.controller.js";
 import { profile } from "./profile.controller.js";
 
@@ -18,6 +20,8 @@ router.use(requireRole("COMPANY", "ADMIN"));
 router.get("/profile", profile);
 router.get("/dashboard", dashboard);
 router.get("/dashboard/stats", dashboardStats);
+router.get("/results", listCrawlerResults);
+router.get("/results/:id", crawlerResultDetails);
 router.get("/logos", listReferenceLogos);
 router.post(
   "/logos/upload",

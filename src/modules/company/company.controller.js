@@ -4,6 +4,8 @@ import {
   getCompanyDashboard,
   createReferenceLogo,
   getReferenceLogos,
+  getCompanyCrawlerResults,
+  getCompanyCrawlerResultById,
 } from "./company.service.js";
 
 export const dashboard = asyncHandler(async (req, res) => {
@@ -16,7 +18,9 @@ export const dashboardStats = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     stats: result.stats,
+    crawlerStats: result.crawlerStats,
     recentAnalyses: result.recentAnalyses,
+    recentCrawlerResults: result.recentCrawlerResults,
     recentReports: result.recentReports,
   });
 });
@@ -49,4 +53,29 @@ export const uploadReferenceLogo = asyncHandler(async (req, res) => {
 export const listReferenceLogos = asyncHandler(async (req, res) => {
   const items = await getReferenceLogos(req.user.id);
   res.status(200).json({ items });
+});
+
+export const listCrawlerResults = asyncHandler(async (req, res) => {
+  const result = await getCompanyCrawlerResults({
+    companyId: req.user.companyId,
+    status: req.query.status,
+    productStatus: req.query.productStatus,
+    sourceType: req.query.sourceType,
+    accountLabel: req.query.accountLabel,
+    targetSite: req.query.targetSite,
+    brand: req.query.brand,
+    page: req.query.page,
+    limit: req.query.limit,
+  });
+
+  res.status(200).json(result);
+});
+
+export const crawlerResultDetails = asyncHandler(async (req, res) => {
+  const item = await getCompanyCrawlerResultById({
+    id: req.params.id,
+    companyId: req.user.companyId,
+  });
+
+  res.status(200).json({ item });
 });
