@@ -3,11 +3,23 @@ import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/app-error.js";
 import { signAccessToken } from "../../utils/jwt.js";
 
+const userInclude = {
+  company: {
+    select: {
+      id: true,
+      name: true,
+      brandSlug: true,
+    },
+  },
+};
+
 const sanitizeUser = (user) => ({
   id: user.id,
   email: user.email,
   fullName: user.fullName,
   companyName: user.companyName,
+  companyId: user.companyId ?? null,
+  company: user.company ?? null,
   role: user.role,
   isActive: user.isActive,
   createdAt: user.createdAt,
@@ -17,6 +29,7 @@ const sanitizeUser = (user) => ({
 export const loginUser = async ({ email, password }) => {
   const user = await prisma.user.findUnique({
     where: { email },
+    include: userInclude,
   });
 
   if (!user || !user.isActive) {
@@ -44,6 +57,7 @@ export const loginUser = async ({ email, password }) => {
 export const getCurrentUser = async (userId) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
+    include: userInclude,
   });
 
   if (!user || !user.isActive) {

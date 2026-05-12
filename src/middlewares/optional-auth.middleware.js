@@ -20,6 +20,14 @@ export const optionalAuthMiddleware = async (req, res, next) => {
         email: true,
         fullName: true,
         companyName: true,
+        companyId: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+            brandSlug: true,
+          },
+        },
         role: true,
         isActive: true,
       },

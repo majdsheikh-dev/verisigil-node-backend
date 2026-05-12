@@ -20,19 +20,33 @@ enum AnalysisStatus {
   ERROR
 }
 
+model Company {
+  id             Int             @id
+  name           String
+  brandSlug      String          @unique
+  users          User[]
+  crawlerResults CrawlerResult[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
 model User {
   id               String            @id @default(cuid())
   email            String            @unique
   passwordHash     String
   fullName         String?
   companyName      String?
+  companyId        Int?
   role             Role              @default(COMPANY)
   isActive         Boolean           @default(true)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+  company          Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
   analyses         Analysis[]
   referenceLogos   ReferenceLogo[]
   violationReports ViolationReport[]
+
+  @@index([companyId])
 }
 
 model Analysis {
@@ -89,4 +103,45 @@ model ViolationReport {
 
   @@index([userId])
   @@index([analysisId])
+}
+
+model CrawlerResult {
+  id                  String    @id @default(cuid())
+  companyId           Int
+  brand               String
+  sourceType          String
+  sourceName          String?
+  sourceUrl           String
+  platform            String?
+  title               String?
+  description         String?
+  imageUrl            String?
+  localImagePath      String?
+  sellerName          String?
+  sellerProfileUrl    String?
+  productStatus       String    @default("pending_analysis")
+  productStatusLabel  String    @default("Pending Analysis")
+  productConfidence   Float?
+  brandName           String?
+  similarityScore     Float?
+  croppedLogoPath     String?
+  aiNotes             Json?
+  accountLabel        String?
+  fakeProbability     Float?
+  realProbability     Float?
+  accountScorePercent Float?
+  targetSite          String?
+  searchQuery         String?
+  capturedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([brand])
+  @@index([sourceType])
+  @@index([productStatus])
+  @@index([accountLabel])
+  @@index([capturedAt])
 }

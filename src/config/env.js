@@ -30,6 +30,7 @@ export const env = {
   jwtAudience: process.env.JWT_AUDIENCE || "",
   databaseUrl: process.env.DATABASE_URL || "",
   aiServiceUrl: process.env.AI_SERVICE_URL || "http://127.0.0.1:8000",
+  crawlerIngestSecret: process.env.CRAWLER_INGEST_SECRET || "",
   uploadDir: process.env.UPLOAD_DIR || "uploads",
   maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 10),
   jsonBodyLimit: process.env.JSON_BODY_LIMIT || "100kb",
