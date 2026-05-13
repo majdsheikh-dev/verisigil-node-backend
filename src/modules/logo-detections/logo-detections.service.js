@@ -3,6 +3,7 @@ import path from "path";
 
 import { env } from "../../config/env.js";
 import { callLogoDetectionService } from "../../lib/logo-detector-client.js";
+import { callLogoSimilarityService } from "../../lib/logo-similarity-client.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/app-error.js";
 import {
@@ -52,6 +53,94 @@ const resolveCrawlerImagePath = (crawlerPath) => {
   }
 
   return path.join(env.crawlerProjectRoot, crawlerPath);
+};
+
+const mapSimilarityStatusToProductStatus = (rawStatus) => {
+  const normalized = String(rawStatus || "").trim().toLowerCase();
+
+  if (normalized === "real") return "authentic";
+  if (normalized === "fake") return "counterfeit";
+  if (normalized === "suspicious") return "suspicious";
+
+  return "pending_similarity";
+};
+
+const mapProductStatusToLabel = (status) => {
+  const labels = {
+    authentic: "Authentic",
+    suspicious: "Suspicious",
+    counterfeit: "Counterfeit",
+    pending_similarity: "Logo Detected - Pending Similarity",
+  };
+
+  return labels[status] || "Logo Detected - Pending Similarity";
+};
+
+const getSimilarityCropPath = (detection) => {
+  if (detection.cropPath && fs.existsSync(detection.cropPath)) {
+    return detection.cropPath;
+  }
+
+  return null;
+};
+
+const buildSimilarityNotes = (results) => {
+  return results.map((item) => ({
+    logoDetectionId: item.logoDetectionId,
+    detectionId: item.detectionId,
+    brand: item.brand,
+    rawStatus: item.rawStatus,
+    mappedStatus: item.status,
+    similarityScore: item.similarityScore,
+    confidence: item.confidence,
+    notes: item.notes,
+    clipScore: item.clipScore,
+    shapeScore: item.shapeScore,
+    shapeDetails: item.shapeDetails,
+    matchedReferenceId: item.matchedReferenceId,
+    matchedReferencePath: item.matchedReferencePath,
+    topReferenceCandidates: item.topReferenceCandidates,
+    thresholds: item.thresholds,
+    modelVersion: item.modelVersion,
+  }));
+};
+
+const aggregateSimilarityResults = (similarityRows) => {
+  if (!similarityRows.length) {
+    return {
+      status: "pending_similarity",
+      statusLabel: "Logo Detected - Pending Similarity",
+      confidence: null,
+      similarityScore: null,
+      brandName: null,
+      strongest: null,
+    };
+  }
+
+  const statuses = similarityRows.map((row) => row.status);
+
+  let status = "suspicious";
+
+  if (statuses.includes("counterfeit")) {
+    status = "counterfeit";
+  } else if (statuses.every((item) => item === "authentic")) {
+    status = "authentic";
+  }
+
+  const strongest = [...similarityRows].sort((first, second) => {
+    const firstConfidence = first.confidence ?? first.similarityScore ?? 0;
+    const secondConfidence = second.confidence ?? second.similarityScore ?? 0;
+    return secondConfidence - firstConfidence;
+  })[0];
+
+  return {
+    status,
+    statusLabel: mapProductStatusToLabel(status),
+    confidence: strongest?.confidence ?? null,
+    similarityScore: strongest?.similarityScore ?? null,
+    brandName: strongest?.brand ?? null,
+    strongest,
+  };
 };
 
 const saveDetections = async ({
@@ -117,6 +206,92 @@ const getStrongestDetection = (detections) => {
   )[0];
 };
 
+const saveSimilarityResult = async ({ logoDetection, result }) => {
+  const rawStatus = result.status || result.decision || "suspicious";
+  const mappedStatus = mapSimilarityStatusToProductStatus(rawStatus);
+
+  return prisma.logoSimilarity.create({
+    data: {
+      logoDetectionId: logoDetection.id,
+      sourceImageId: result.source_image_id || logoDetection.sourceImageId,
+      detectionId: result.detection_id || logoDetection.detectionId,
+      brand: result.brand || logoDetection.brand,
+      rawStatus,
+      status: mappedStatus,
+      statusLabel: result.status_label || mapProductStatusToLabel(mappedStatus),
+      decision: result.decision || null,
+      isFake: typeof result.is_fake === "boolean" ? result.is_fake : null,
+      similarityScore:
+        typeof result.similarity_score === "number" ? result.similarity_score : null,
+      clipScore: typeof result.clip_score === "number" ? result.clip_score : null,
+      shapeScore: typeof result.shape_score === "number" ? result.shape_score : null,
+      shapeDetails: result.shape_details || null,
+      topReferenceCandidates: result.top_reference_candidates || null,
+      confidence: typeof result.confidence === "number" ? result.confidence : null,
+      thresholdUsed:
+        typeof result.threshold_used === "number" ? result.threshold_used : null,
+      thresholds: result.thresholds || null,
+      matchedReferenceId: result.matched_reference_id || null,
+      matchedReferencePath: result.matched_reference_path || null,
+      matchedReference: result.matched_reference || null,
+      logoConfidence:
+        typeof result.logo_confidence === "number"
+          ? result.logo_confidence
+          : logoDetection.logoConfidence,
+      notes: result.notes || null,
+      modelVersion: result.model_version || null,
+      rawResponse: result,
+    },
+  });
+};
+
+const runSimilarityForDetections = async (logoDetections) => {
+  const results = [];
+  const errors = [];
+
+  for (const detection of logoDetections) {
+    try {
+      const cropPath = getSimilarityCropPath(detection);
+
+      if (!cropPath) {
+        errors.push({
+          logoDetectionId: detection.id,
+          detectionId: detection.detectionId,
+          error: "Crop path was not found on disk",
+        });
+        continue;
+      }
+
+      const similarityResult = await callLogoSimilarityService({
+        imagePath: cropPath,
+        brand: detection.brand,
+        sourceImageId: detection.sourceImageId,
+        detectionId: detection.detectionId,
+        logoConfidence: detection.logoConfidence,
+      });
+
+      const saved = await saveSimilarityResult({
+        logoDetection: detection,
+        result: similarityResult,
+      });
+
+      results.push(saved);
+    } catch (error) {
+      errors.push({
+        logoDetectionId: detection.id,
+        detectionId: detection.detectionId,
+        error: error.message || "Similarity failed",
+        details: error.details || null,
+      });
+    }
+  }
+
+  return {
+    results,
+    errors,
+  };
+};
+
 export const detectLogosForAnalysis = async ({ analysisId, userId, guestToken }) => {
   const analysis = await prisma.analysis.findUnique({
     where: { id: analysisId },
@@ -154,6 +329,7 @@ export const detectLogosForAnalysis = async ({ analysisId, userId, guestToken })
     analysisId: analysis.id,
   });
 
+  const similarityRun = await runSimilarityForDetections(createdDetections);
   const normalizedDetections = createdDetections.map(normalizeLogoDetectionResponse);
 
   if (!runPayload.detected) {
@@ -172,11 +348,44 @@ export const detectLogosForAnalysis = async ({ analysisId, userId, guestToken })
         },
       },
     });
+  } else if (similarityRun.results.length) {
+    const aggregate = aggregateSimilarityResults(similarityRun.results);
+
+    const mappedAnalysisStatus = {
+      authentic: "AUTHENTIC",
+      suspicious: "SUSPICIOUS",
+      counterfeit: "COUNTERFEIT",
+    }[aggregate.status];
+
+    if (mappedAnalysisStatus) {
+      await prisma.analysis.update({
+        where: { id: analysis.id },
+        data: {
+          status: mappedAnalysisStatus,
+          statusLabel: aggregate.statusLabel,
+          confidence: aggregate.confidence,
+          brandName: aggregate.brandName,
+          similarityScore: aggregate.similarityScore,
+          croppedLogoPath: aggregate.strongest?.matchedReferencePath || null,
+          notes: aggregate.strongest?.notes || "Logo similarity completed.",
+          aiRawResponse: {
+            ...(analysis.aiRawResponse || {}),
+            logoDetection: runPayload,
+            logoSimilarity: buildSimilarityNotes(similarityRun.results),
+            logoSimilarityErrors: similarityRun.errors,
+          },
+        },
+      });
+    }
   }
 
   return {
     ...normalizeLogoDetectionRunResponse(runPayload),
     detections: normalizedDetections,
+    similarity: {
+      results: similarityRun.results,
+      errors: similarityRun.errors,
+    },
   };
 };
 
@@ -230,11 +439,25 @@ export const detectLogosForCrawlerResult = async ({ crawlerResultId, companyId }
         brandName: null,
         croppedLogoPath: null,
         aiNotes: {
+          ...(crawlerResult.aiNotes || {}),
           logoDetection: runPayload,
         },
       },
     });
-  } else {
+
+    return {
+      ...normalizeLogoDetectionRunResponse(runPayload),
+      detections: normalizedDetections,
+      similarity: {
+        results: [],
+        errors: [],
+      },
+    };
+  }
+
+  const similarityRun = await runSimilarityForDetections(createdDetections);
+
+  if (!similarityRun.results.length) {
     await prisma.crawlerResult.update({
       where: { id: crawlerResult.id },
       data: {
@@ -244,8 +467,30 @@ export const detectLogosForCrawlerResult = async ({ crawlerResultId, companyId }
         brandName: strongestDetection?.brand ?? null,
         croppedLogoPath: strongestDetection?.cropUrl ?? null,
         aiNotes: {
+          ...(crawlerResult.aiNotes || {}),
           logoDetection: runPayload,
-          nextStep: "Send each cropped logo to Logo Similarity/Fake Detection model.",
+          logoSimilarityErrors: similarityRun.errors,
+          nextStep: "Similarity service did not return a result. Retry comparison later.",
+        },
+      },
+    });
+  } else {
+    const aggregate = aggregateSimilarityResults(similarityRun.results);
+
+    await prisma.crawlerResult.update({
+      where: { id: crawlerResult.id },
+      data: {
+        productStatus: aggregate.status,
+        productStatusLabel: aggregate.statusLabel,
+        productConfidence: aggregate.confidence,
+        brandName: aggregate.brandName,
+        similarityScore: aggregate.similarityScore,
+        croppedLogoPath: strongestDetection?.cropUrl ?? null,
+        aiNotes: {
+          ...(crawlerResult.aiNotes || {}),
+          logoDetection: runPayload,
+          similarity: buildSimilarityNotes(similarityRun.results),
+          logoSimilarityErrors: similarityRun.errors,
         },
       },
     });
@@ -254,5 +499,9 @@ export const detectLogosForCrawlerResult = async ({ crawlerResultId, companyId }
   return {
     ...normalizeLogoDetectionRunResponse(runPayload),
     detections: normalizedDetections,
+    similarity: {
+      results: similarityRun.results,
+      errors: similarityRun.errors,
+    },
   };
 };

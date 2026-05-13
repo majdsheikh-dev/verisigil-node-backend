@@ -170,8 +170,9 @@ model LogoDetection {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  analysis      Analysis?      @relation(fields: [analysisId], references: [id], onDelete: Cascade)
-  crawlerResult CrawlerResult? @relation(fields: [crawlerResultId], references: [id], onDelete: Cascade)
+  analysis      Analysis?       @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  crawlerResult CrawlerResult?  @relation(fields: [crawlerResultId], references: [id], onDelete: Cascade)
+  similarity    LogoSimilarity?
 
   @@unique([sourceImageId, detectionId])
   @@index([analysisId])
@@ -179,4 +180,41 @@ model LogoDetection {
   @@index([sourceImageId])
   @@index([sourceType])
   @@index([brand])
+}
+
+model LogoSimilarity {
+  id                     String   @id @default(cuid())
+  logoDetectionId        String   @unique
+  sourceImageId          String
+  detectionId            String
+  brand                  String
+  rawStatus              String
+  status                 String
+  statusLabel            String
+  decision               String?
+  isFake                 Boolean?
+  similarityScore        Float?
+  clipScore              Float?
+  shapeScore             Float?
+  shapeDetails           Json?
+  topReferenceCandidates Json?
+  confidence             Float?
+  thresholdUsed          Float?
+  thresholds             Json?
+  matchedReferenceId     String?
+  matchedReferencePath   String?
+  matchedReference       String?
+  logoConfidence         Float?
+  notes                  String?
+  modelVersion           String?
+  rawResponse            Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  logoDetection LogoDetection @relation(fields: [logoDetectionId], references: [id], onDelete: Cascade)
+
+  @@index([sourceImageId])
+  @@index([detectionId])
+  @@index([brand])
+  @@index([status])
 }

@@ -32,6 +32,12 @@ export const env = {
   aiServiceUrl: process.env.AI_SERVICE_URL || "http://127.0.0.1:8000",
   logoDetectionServiceUrl:
     process.env.LOGO_DETECTION_SERVICE_URL || "http://127.0.0.1:8001",
+  logoSimilarityServiceUrl:
+    process.env.LOGO_SIMILARITY_SERVICE_URL || "http://127.0.0.1:8002",
+  logoSimilarityTimeoutMs: toPositiveNumber(
+    process.env.LOGO_SIMILARITY_TIMEOUT_MS,
+    60000
+  ),
   crawlerIngestSecret: process.env.CRAWLER_INGEST_SECRET || "",
   crawlerProjectRoot: process.env.CRAWLER_PROJECT_ROOT || "",
   crawlerPythonPath: process.env.CRAWLER_PYTHON_PATH || "",
