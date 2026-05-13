@@ -1,9 +1,14 @@
+import { spawn } from "child_process";
+import fs from "fs";
+import path from "path";
+
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/app-error.js";
 import { getDashboardStats } from "../logos/logos.service.js";
 import { normalizeAnalysisResponse } from "../../utils/analysis-mapper.js";
 import { normalizeCrawlerResultResponse } from "../../utils/crawler-result-mapper.js";
 import { toPublicUploadPath } from "../../utils/upload-path.js";
+import { env } from "../../config/env.js";
 
 const getUserCompanyId = async (userId) => {
   const user = await prisma.user.findUnique({
@@ -52,6 +57,69 @@ const buildCrawlerResultWhere = ({
   }
 
   return where;
+};
+
+const normalizeSites = (sites) => {
+  const rawSites = Array.isArray(sites) ? sites : [sites];
+
+  const normalizedSites = rawSites
+    .map((site) => String(site || "").trim().toLowerCase())
+    .filter(Boolean)
+    .map((site) => site.replace(/^https?:\/\//i, ""))
+    .map((site) => site.replace(/^www\./i, ""))
+    .map((site) => site.split("/")[0])
+    .filter((site) => /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(site));
+
+  return [...new Set(normalizedSites)];
+};
+
+const normalizeScanLimit = (limit) => {
+  const parsed = Number(limit);
+
+  if (!Number.isFinite(parsed)) {
+    return 5;
+  }
+
+  return Math.min(Math.max(Math.trunc(parsed), 1), 20);
+};
+
+const getCrawlerPythonPath = () => {
+  if (env.crawlerPythonPath) {
+    return env.crawlerPythonPath;
+  }
+
+  if (!env.crawlerProjectRoot) {
+    return "";
+  }
+
+  return path.join(env.crawlerProjectRoot, ".venv", "Scripts", "python.exe");
+};
+
+const startDetachedProcess = ({ command, args, cwd, label }) => {
+  const child = spawn(command, args, {
+    cwd,
+    detached: false,
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  child.stdout.on("data", (data) => {
+    console.log(`[${label}] ${String(data).trim()}`);
+  });
+
+  child.stderr.on("data", (data) => {
+    console.error(`[${label} ERROR] ${String(data).trim()}`);
+  });
+
+  child.on("error", (error) => {
+    console.error(`[${label} FAILED]`, error);
+  });
+
+  child.on("close", (code) => {
+    console.log(`[${label}] exited with code ${code}`);
+  });
+
+  return child.pid;
 };
 
 export const getCompanyDashboard = async (userId) => {
@@ -232,4 +300,67 @@ export const getCompanyCrawlerResultById = async ({ id, companyId }) => {
   }
 
   return normalizeCrawlerResultResponse(item);
+};
+
+export const startCompanyGoogleScan = async ({
+  companyId,
+  companyBrandSlug,
+  sites,
+  limit,
+}) => {
+  if (!companyId || !companyBrandSlug) {
+    throw new AppError(400, "User is not linked to a company");
+  }
+
+  const normalizedSites = normalizeSites(sites);
+
+  if (!normalizedSites.length) {
+    throw new AppError(400, "At least one valid target site is required");
+  }
+
+  const safeLimit = normalizeScanLimit(limit);
+
+  if (!env.crawlerProjectRoot) {
+    throw new AppError(500, "CRAWLER_PROJECT_ROOT is not configured");
+  }
+
+  if (!fs.existsSync(env.crawlerProjectRoot)) {
+    throw new AppError(500, "Crawler project root does not exist", {
+      crawlerProjectRoot: env.crawlerProjectRoot,
+    });
+  }
+
+  const pythonPath = getCrawlerPythonPath();
+
+  if (!pythonPath || !fs.existsSync(pythonPath)) {
+    throw new AppError(500, "Crawler Python executable was not found", {
+      crawlerPythonPath: pythonPath,
+    });
+  }
+
+  const args = [
+    "-m",
+    "src.google_main",
+    "--brand",
+    companyBrandSlug,
+    "--sites",
+    ...normalizedSites,
+    "--limit",
+    String(safeLimit),
+  ];
+
+  const pid = startDetachedProcess({
+    command: pythonPath,
+    args,
+    cwd: env.crawlerProjectRoot,
+    label: `GOOGLE_SCAN:${companyBrandSlug}`,
+  });
+
+  return {
+    message: "Google targeted scan started",
+    pid,
+    brand: companyBrandSlug,
+    sites: normalizedSites,
+    limit: safeLimit,
+  };
 };

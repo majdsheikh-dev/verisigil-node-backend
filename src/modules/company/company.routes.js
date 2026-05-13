@@ -9,6 +9,7 @@ import {
   listReferenceLogos,
   listCrawlerResults,
   crawlerResultDetails,
+  startGoogleScan,
 } from "./company.controller.js";
 import { profile } from "./profile.controller.js";
 
@@ -20,6 +21,7 @@ router.use(requireRole("COMPANY", "ADMIN"));
 router.get("/profile", profile);
 router.get("/dashboard", dashboard);
 router.get("/dashboard/stats", dashboardStats);
+router.post("/scans/google", startGoogleScan);
 router.get("/results", listCrawlerResults);
 router.get("/results/:id", crawlerResultDetails);
 router.get("/logos", listReferenceLogos);

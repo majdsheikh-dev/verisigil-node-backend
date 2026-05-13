@@ -34,6 +34,7 @@ export const env = {
     process.env.LOGO_DETECTION_SERVICE_URL || "http://127.0.0.1:8001",
   crawlerIngestSecret: process.env.CRAWLER_INGEST_SECRET || "",
   crawlerProjectRoot: process.env.CRAWLER_PROJECT_ROOT || "",
+  crawlerPythonPath: process.env.CRAWLER_PYTHON_PATH || "",
   uploadDir: process.env.UPLOAD_DIR || "uploads",
   maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 10),
   jsonBodyLimit: process.env.JSON_BODY_LIMIT || "100kb",

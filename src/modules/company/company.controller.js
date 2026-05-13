@@ -6,6 +6,7 @@ import {
   getReferenceLogos,
   getCompanyCrawlerResults,
   getCompanyCrawlerResultById,
+  startCompanyGoogleScan,
 } from "./company.service.js";
 
 export const dashboard = asyncHandler(async (req, res) => {
@@ -78,4 +79,15 @@ export const crawlerResultDetails = asyncHandler(async (req, res) => {
   });
 
   res.status(200).json({ item });
+});
+
+export const startGoogleScan = asyncHandler(async (req, res) => {
+  const result = await startCompanyGoogleScan({
+    companyId: req.user.companyId,
+    companyBrandSlug: req.user.company?.brandSlug,
+    sites: req.body.sites || req.body.site,
+    limit: req.body.limit,
+  });
+
+  res.status(202).json(result);
 });
