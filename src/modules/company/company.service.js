@@ -144,8 +144,11 @@ export const getCompanyDashboard = async (userId) => {
   const crawlerStats = {
     totalCrawlerResults: 0,
     pendingAnalysisCount: 0,
+    pendingSimilarityCount: 0,
+    authenticCount: 0,
     suspiciousCount: 0,
     counterfeitCount: 0,
+    noLogoDetectedCount: 0,
     fakeAccountsCount: 0,
     instagramCount: 0,
     googleImagesCount: 0,
@@ -157,8 +160,11 @@ export const getCompanyDashboard = async (userId) => {
     const [
       totalCrawlerResults,
       pendingAnalysisCount,
+      pendingSimilarityCount,
+      authenticCount,
       suspiciousCount,
       counterfeitCount,
+      noLogoDetectedCount,
       fakeAccountsCount,
       instagramCount,
       googleImagesCount,
@@ -171,10 +177,19 @@ export const getCompanyDashboard = async (userId) => {
         where: { companyId, productStatus: "pending_analysis" },
       }),
       prisma.crawlerResult.count({
+        where: { companyId, productStatus: "pending_similarity" },
+      }),
+      prisma.crawlerResult.count({
+        where: { companyId, productStatus: "authentic" },
+      }),
+      prisma.crawlerResult.count({
         where: { companyId, productStatus: "suspicious" },
       }),
       prisma.crawlerResult.count({
         where: { companyId, productStatus: "counterfeit" },
+      }),
+      prisma.crawlerResult.count({
+        where: { companyId, productStatus: "no_logo_detected" },
       }),
       prisma.crawlerResult.count({
         where: { companyId, accountLabel: "fake" },
@@ -194,8 +209,11 @@ export const getCompanyDashboard = async (userId) => {
 
     crawlerStats.totalCrawlerResults = totalCrawlerResults;
     crawlerStats.pendingAnalysisCount = pendingAnalysisCount;
+    crawlerStats.pendingSimilarityCount = pendingSimilarityCount;
+    crawlerStats.authenticCount = authenticCount;
     crawlerStats.suspiciousCount = suspiciousCount;
     crawlerStats.counterfeitCount = counterfeitCount;
+    crawlerStats.noLogoDetectedCount = noLogoDetectedCount;
     crawlerStats.fakeAccountsCount = fakeAccountsCount;
     crawlerStats.instagramCount = instagramCount;
     crawlerStats.googleImagesCount = googleImagesCount;
@@ -357,7 +375,7 @@ export const startCompanyGoogleScan = async ({
   });
 
   return {
-    message: "Google targeted scan started",
+    message: `Google targeted scan started for ${companyBrandSlug} on ${normalizedSites.join(", ")}`,
     pid,
     brand: companyBrandSlug,
     sites: normalizedSites,
