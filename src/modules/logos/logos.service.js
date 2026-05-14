@@ -1,11 +1,7 @@
-import fs from "fs";
-import FormData from "form-data";
-
 import { prisma } from "../../lib/prisma.js";
-import { aiClient } from "../../lib/ai-client.js";
 import { AppError } from "../../utils/app-error.js";
-import { mapAiResultToAnalysisData } from "../../utils/ai-result-mapper.js";
 import { toPublicUploadPath } from "../../utils/upload-path.js";
+import { detectLogosForAnalysis } from "../logo-detections/logo-detections.service.js";
 
 export const getHistory = async ({ userId, guestToken, page = 1, limit = 10 }) => {
   if (!userId && !guestToken) {
@@ -29,7 +25,8 @@ export const getHistory = async ({ userId, guestToken, page = 1, limit = 10 }) =
   const [items, total] = await Promise.all([
     prisma.analysis.findMany({
       where,
-      orderBy: { createdAt: "desc",
+      orderBy: {
+        createdAt: "desc",
       },
       skip,
       take: safeLimit,
@@ -68,25 +65,6 @@ export const getAnalysisById = async ({ id, userId, guestToken }) => {
   return analysis;
 };
 
-const callAiService = async (file) => {
-  try {
-    const formData = new FormData();
-    formData.append("image", fs.createReadStream(file.path), file.originalname);
-
-    const response = await aiClient.post("/ai/full-analysis", formData, {
-      headers: formData.getHeaders(),
-    });
-
-    return response.data;
-  } catch (error) {
-    throw new AppError(
-      502,
-      "AI service is unavailable or returned an invalid response",
-      error.response?.data || error.message
-    );
-  }
-};
-
 export const createAnalysis = async ({ file, userId, guestToken }) => {
   if (!file) {
     throw new AppError(400, "Image file is required");
@@ -96,18 +74,55 @@ export const createAnalysis = async ({ file, userId, guestToken }) => {
     throw new AppError(400, "Guest token or authenticated user is required");
   }
 
-  const aiResult = await callAiService(file);
-
-  const analysisData = mapAiResultToAnalysisData(
-    aiResult,
-    toPublicUploadPath(file.path),
-    userId,
-    guestToken
-  );
-
-  return prisma.analysis.create({
-    data: analysisData,
+  const createdAnalysis = await prisma.analysis.create({
+    data: {
+      userId: userId || null,
+      guestToken: guestToken || null,
+      originalImagePath: toPublicUploadPath(file.path),
+      croppedLogoPath: null,
+      status: "SUSPICIOUS",
+      statusLabel: "Pending Verification",
+      confidence: null,
+      brandName: null,
+      similarityScore: null,
+      sourceType: "user_upload",
+      sourceUrl: null,
+      notes: "Product image was uploaded and is waiting for logo verification.",
+      aiRawResponse: {
+        pipeline: "logo_detection_similarity",
+        initialStatus: "pending_verification",
+      },
+    },
   });
+
+  try {
+    await detectLogosForAnalysis({
+      analysisId: createdAnalysis.id,
+      userId,
+      guestToken,
+    });
+
+    return prisma.analysis.findUnique({
+      where: { id: createdAnalysis.id },
+    });
+  } catch (error) {
+    await prisma.analysis.update({
+      where: { id: createdAnalysis.id },
+      data: {
+        status: "ERROR",
+        statusLabel: "Analysis Error",
+        confidence: null,
+        notes: error.message || "Logo verification failed.",
+        aiRawResponse: {
+          ...(createdAnalysis.aiRawResponse || {}),
+          error: error.message || "Logo verification failed.",
+          details: error.details || null,
+        },
+      },
+    });
+
+    throw error;
+  }
 };
 
 export const getDashboardStats = async ({ userId }) => {

@@ -29,6 +29,15 @@ const resolveBackendUploadPath = (publicOrLocalPath) => {
   if (!publicOrLocalPath) return null;
 
   const normalized = String(publicOrLocalPath).replaceAll("\\", "/");
+  const uploadPrefix = `${env.uploadDir}/`;
+
+  if (normalized.startsWith(`/${uploadPrefix}`)) {
+    return path.join(process.cwd(), normalized.slice(1));
+  }
+
+  if (normalized.startsWith(uploadPrefix)) {
+    return path.join(process.cwd(), normalized);
+  }
 
   if (path.isAbsolute(publicOrLocalPath)) {
     return publicOrLocalPath;

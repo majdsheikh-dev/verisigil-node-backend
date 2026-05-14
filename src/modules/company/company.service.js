@@ -41,7 +41,15 @@ const buildCrawlerResultWhere = ({
   }
 
   if (sourceType) {
-    where.sourceType = String(sourceType).trim();
+    const normalizedSourceType = String(sourceType).trim();
+
+    if (normalizedSourceType === "google_images") {
+      where.platform = "google_images";
+    } else if (normalizedSourceType === "instagram") {
+      where.sourceType = "instagram";
+    } else {
+      where.sourceType = normalizedSourceType;
+    }
   }
 
   if (accountLabel) {
@@ -49,7 +57,7 @@ const buildCrawlerResultWhere = ({
   }
 
   if (targetSite) {
-    where.targetSite = String(targetSite).trim();
+    where.targetSite = String(targetSite).trim().toLowerCase();
   }
 
   if (brand) {
